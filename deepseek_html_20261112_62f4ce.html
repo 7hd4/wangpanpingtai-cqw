@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>网盘悬赏大厅</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+/* ========= UI 样式（完美缝合版） ========= */
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+body { background-color: #F0F4F8; color: #1F1F1F; font-family: -apple-system, BlinkMacSystemFont, "Google Sans", "Segoe UI", Roboto, sans-serif; padding-bottom: 100px; -webkit-font-smoothing: antialiased; overflow-x: hidden; min-height: 100vh; }
+.page { display: none; min-height: calc(100vh - 100px); position: relative; }
+.page.active { display: block; }
+#homePage.active { display: flex; flex-direction: column; height: calc(100vh - 100px); overflow: hidden; }
+.empty { text-align: center; color: #5F6368; padding: 60px 0; font-size: 16px; }
+.home-header { background: #FFFFFF; padding: 16px 20px 8px; display: flex; align-items: center; justify-content: space-between; z-index: 100; }
+.header-left { display: flex; align-items: center; gap: 12px; }
+.header-logo { width: 42px; height: 42px; background: #E8F0FE; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px; color: #1A73E8; }
+.header-title { font-size: 22px; font-weight: 500; color: #1F1F1F; }
+.header-more { font-size: 13px; color: #1A73E8; display: flex; align-items: center; cursor: pointer; font-weight: 500; background: #E8F0FE; padding: 6px 12px; border-radius: 20px; }
+.list-container { padding: 16px 16px 10px; overflow-y: auto; flex: 1; -webkit-overflow-scrolling: touch; }
+
+/* 分类标签栏 */
+.category-tabs { display: flex; overflow-x: auto; gap: 8px; margin-bottom: 15px; padding-bottom: 5px; scrollbar-width: none; }
+.category-tabs::-webkit-scrollbar { display: none; }
+.cat-tab { flex: none; padding: 6px 14px; background: #fff; border-radius: 20px; font-size: 13px; color: #5F6368; font-weight: 500; border: 1px solid #E8EAED; cursor: pointer; transition: 0.2s; }
+.cat-tab.active { background: #1A73E8; color: #fff; border-color: #1A73E8; box-shadow: 0 2px 4px rgba(26,115,232,.2); }
+
+.card { background: #FFFFFF; border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 2px 0 rgba(60,64,67,.15); border: none; transition: all 0.3s; position: relative; overflow: hidden; }
+.card.locked { opacity: 0.7; filter: grayscale(0.5); }
+.card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.card-title { font-size: 18px; font-weight: 500; color: #1F1F1F; }
+.card-price { font-size: 20px; font-weight: bold; color: #1A73E8; }
+.card-desc { font-size: 14px; color: #5F6368; margin-bottom: 18px; }
+.daily-badge { position: absolute; top: 0; right: 0; background: linear-gradient(135deg, #ff6b6b, #ff8e53); color: white; font-size: 11px; padding: 4px 10px; border-bottom-left-radius: 10px; font-weight: bold; }
+
+/* 底部导航 */
+.bottom-nav { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); width: 92%; max-width: 450px; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.6); border-radius: 28px; display: flex; justify-content: space-around; align-items: center; padding: 8px 4px; box-shadow: 0 4px 6px 0 rgba(60,64,67,.15); z-index: 999999 !important; }
+.nav-item { display: flex; flex-direction: column; align-items: center; justify-content: center; color: #5F6368; font-size: 11px; cursor: pointer; transition: all 0.3s ease; position: relative; width: 60px; }
+.nav-icon-wrapper { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; margin-bottom: 2px; border-radius: 16px; transition: all 0.3s ease; }
+.nav-icon-wrapper svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.nav-item.active { color: #1A73E8; font-weight: 500; }
+.nav-item.active .nav-icon-wrapper { background: #E8F0FE; padding: 4px 12px; width: auto; border-radius: 16px; }
+
+/* 我的页面 */
+.mine-hero { margin: 16px 16px 0; border-radius: 20px; padding: 22px 20px 0; background: linear-gradient(135deg,#4f6ef7 0%,#7b5cf5 60%,#a35cf5 100%); color:#fff; box-shadow: 0 14px 28px -16px rgba(79,110,247,.8); position:relative; overflow:hidden; }
+.mine-user-row { display:flex; align-items:center; gap:14px; position:relative; z-index:1; }
+.mine-avatar { width:60px; height:60px; border-radius:50%; background:rgba(255,255,255,.22); border:2px solid rgba(255,255,255,.55); display:flex; align-items:center; justify-content:center; font-size:26px; font-weight:700; flex:none; }
+.mine-name { font-size:19px; font-weight:700; }
+.mine-uid-row { display:flex; align-items:center; gap:8px; margin-top:5px; }
+.mine-uid { font-size:12px; opacity:.85; font-family:monospace; }
+.mine-stats { position:relative; z-index:1; display:flex; margin-top:18px; background:rgba(255,255,255,.12); border-radius:14px 14px 0 0; padding:12px 0 14px; }
+.mine-stat { flex:1; text-align:center; }
+.mine-stat b { display:block; font-size:17px; font-weight:800; }
+.mine-stat span { font-size:11px; opacity:.75; }
+.mine-stat + .mine-stat { border-left:1px solid rgba(255,255,255,.18); }
+.mine-section { margin: 14px 16px 0; background:#fff; border-radius:16px; padding:6px 14px; box-shadow:0 1px 3px rgba(60,64,67,.12); }
+.mine-admin-btn { width:100%; height:48px; border:none; border-radius:14px; background:linear-gradient(135deg,#1A73E8,#4f6ef7); color:#fff; font-size:15px; font-weight:600; margin:8px 0 10px; }
+.mine-logout-btn { width:100%; height:48px; border-radius:14px; background:#FCE8E6; color:#D93025; border:1px solid #FAD2CF; font-size:15px; font-weight:500; }
+
+/* 弹窗与组件 (完美发卡UI) */
+.modal-overlay { position: fixed; inset: 0; background: rgba(32,33,36,0.6); display: flex; justify-content: center; align-items: center; z-index: 99999; padding: 20px; }
+.modal-overlay.hidden { display: none; }
+.modal-content { background: #FFFFFF; width: 100%; max-width: 380px; max-height: 85vh; overflow-y: auto; border-radius: 28px; padding: 24px 20px; position: relative; box-shadow: 0 11px 15px -7px rgba(0,0,0,.2), 0 24px 38px 3px rgba(0,0,0,.14); }
+.close-btn-modal { position: absolute; top: 16px; right: 16px; width: 36px; height: 36px; background: #F1F3F4; border: none; border-radius: 50%; cursor: pointer; }
+.modal-header { display: flex; flex-direction: column; align-items: center; gap: 12px; margin-bottom: 24px; }
+.logo-box { width: 64px; height: 64px; border: 2px solid #E8F0FE; border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: bold; color: #1A73E8; background: #E8F0FE; line-height: 1.1; }
+.modal-title { font-size: 22px; font-weight: 500; color: #1F1F1F; }
+.modal-subtitle { font-size: 14px; color: #5F6368; }
+.input-group { display: flex; align-items: center; background: #F8F9FA; border-radius: 8px; padding: 0 16px; height: 52px; margin-bottom: 16px; border: 1px solid #DADCE0; }
+.input-field { flex: 1; border: none; background: transparent; font-size: 16px; outline: none; height: 100%; }
+.eye-icon { width: 20px; height: 20px; stroke: #5F6368; fill: none; stroke-width: 2; cursor: pointer; margin-left: 10px; }
+.captcha-row { display: flex; gap: 8px; margin-bottom: 16px; align-items: center; width: 100%; }
+.captcha-input-group { flex: 1; display: flex; align-items: center; background: #F8F9FA; border-radius: 8px; padding: 0 12px; height: 52px; border: 1px solid #DADCE0; }
+.captcha-img-box, .code-btn { flex: 0 0 33.33%; width: 33.33%; height: 52px; border-radius: 8px; display: flex; align-items: center; justify-content: center; border: 1px solid #DADCE0; }
+.captcha-img-box { background: #F1F3F4; }
+.captcha-img-box canvas { width: 100% !important; height: 100% !important; display: block; }
+.code-btn { background: #E8F0FE; color: #1A73E8; border: none; font-size: 13px; font-weight: 500; }
+.code-btn:disabled { background: #F1F3F4; color: #80868B; }
+.login-btn, .register-btn { width: 100%; height: 52px; border-radius: 26px; background: #1A73E8; color: white; border: none; font-size: 17px; font-weight: 500; margin-top: 10px; cursor: pointer; }
+.modal-footer { display: flex; flex-direction: column; align-items: center; gap: 12px; margin-top: 24px; }
+.footer-text { font-size: 14px; color: #5F6368; }
+.footer-link { font-size: 14px; color: #1A73E8; cursor: pointer; font-weight: 500; }
+
+.toast { position: fixed; left: 50%; top: 50%; z-index: 9999999; transform: translate(-50%,-50%) scale(.9); padding: 11px 20px; border-radius: 12px; background: rgba(20,22,32,.9); color: #fff; font-size: 13.5px; opacity: 0; pointer-events: none; transition: opacity .25s; }
+.toast.show { opacity: 1; transform: translate(-50%,-50%) scale(1); }
+
+/* 任务专属与后台样式 */
+.rule-box { background: #fff3cd; color: #856404; padding: 10px; border-radius: 6px; font-size: 12px; line-height: 1.5; margin-bottom: 15px; border: 1px solid #ffeeba; }
+.upload-btn { display: block; width: 100%; padding: 10px; background: #F1F3F4; color: #1A73E8; text-align: center; border-radius: 8px; font-size: 14px; font-weight: 500; margin-bottom: 10px; border: 1px dashed #1A73E8; cursor: pointer; }
+.btn-submit { width: 100%; height: 44px; border-radius: 22px; background: #28a745; color: white; border: none; font-size: 15px; font-weight: bold; margin-top: 10px; }
+.btn-submit.locked-btn { background: #9CA3AF !important; cursor: not-allowed; }
+.btn-withdraw { width: 100%; height: 44px; border-radius: 22px; background: #1A73E8; color: white; border: none; font-size: 15px; font-weight: bold; }
+.admin-card { background:#fff; border:1px solid #ccc; border-radius:10px; padding:10px; margin-bottom:10px; }
+.admin-card img { width: 80px; height: 80px; object-fit: cover; border-radius: 6px; margin-top: 5px; }
+</style>
+</head>
+<body>
+
+<!-- 首页 -->
+<div id="homePage" class="page active">
+  <div class="home-header">
+    <div class="header-left">
+      <div class="header-logo"><span>👑</span></div>
+      <div class="header-title">转存悬赏</div>
+    </div>
+    <div class="header-more" onclick="loadTasks()">🔄 刷新</div>
+  </div>
+  <div class="list-container" id="listContainer">
+    <div class="rule-box">
+      <b>⚠️ 盲盒与防P图规则：</b><br>
+      1. 本站<b>仅结算“文件转存”收益</b>。<br>
+      2. <b>每个网盘分类每天随机分配1个任务</b>，做完可做其他分类。<br>
+      3. 截图必须包含<b>手机顶部时间</b>和<b>保存成功提示</b>。<br>
+      4. 今日手写口令：<b id="today-pwd" style="color:red; font-size:14px;">加载中...</b><br>
+      5. 发现P图/假图，扣除所有余额并封号！
+    </div>
+    
+    <div class="category-tabs" id="categoryTabs">
+      <div class="cat-tab active" onclick="filterCategory('all', this)">🎁 全部分类盲盒</div>
+    </div>
+
+    <div id="task-list">
+      <div class="empty">正在加载任务...</div>
+    </div>
+  </div>
+</div>
+
+<!-- 提现记录页 -->
+<div id="orderPage" class="page">
+  <div class="home-header">
+    <div class="header-left">
+      <div class="header-logo"><span>🧾</span></div>
+      <div class="header-title">提现记录</div>
+    </div>
+  </div>
+  <div class="list-container" id="orderList">
+    <div class="empty">暂无记录</div>
+  </div>
+</div>
+
+<!-- 我的页面 -->
+<div id="minePage" class="page">
+  
+  <!-- 登录/注册弹窗 -->
+  <div id="loginModal" class="modal-overlay hidden">
+    <div class="modal-content">
+      <button class="close-btn-modal" onclick="closeLoginModal()">✕</button>
+      
+      <!-- 登录 -->
+      <div id="loginView">
+        <div class="modal-header">
+          <div class="logo-box">转存<br>悬赏</div>
+          <div class="modal-title">账号登录</div>
+        </div>
+        <div class="input-group">
+          <input type="text" id="loginAccount" class="input-field" placeholder="请输入用户名">
+        </div>
+        <div class="input-group">
+          <input type="password" id="loginPassword" class="input-field" placeholder="请输入密码">
+          <svg class="eye-icon" id="eyeIcon" onclick="togglePasswordVisibility()" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+        </div>
+        <div class="captcha-row">
+          <div class="captcha-input-group">
+            <input type="text" id="loginCaptcha" class="input-field" placeholder="输入验证码" maxlength="4">
+          </div>
+          <div class="captcha-img-box" onclick="drawCaptcha()"><canvas id="captchaCanvas" width="120" height="52"></canvas></div>
+        </div>
+        <button class="login-btn" onclick="handleLogin()">立即登录</button>
+        <div class="modal-footer"><div class="footer-text">没有账号？ <span class="footer-link" onclick="switchAuthView('register')">立即注册</span></div></div>
+      </div>
+
+      <!-- 注册 -->
+      <div id="registerView" style="display: none;">
+        <div class="modal-header">
+          <div class="logo-box">转存<br>悬赏</div>
+          <div class="modal-title">注册账号</div>
+        </div>
+        <div class="input-group">
+          <input type="text" id="regAccount" class="input-field" placeholder="请输入英文/数字账号">
+        </div>
+        <div class="input-group">
+          <input type="password" id="regPassword" class="input-field" placeholder="请设置密码">
+        </div>
+        <div class="captcha-row">
+          <div class="captcha-input-group">
+            <input type="text" id="regCode" class="input-field" placeholder="6位验证码" maxlength="6">
+          </div>
+          <button id="sendCodeBtn" class="code-btn" onclick="sendVerifyCode()">获取验证码</button>
+        </div>
+        <button class="register-btn" style="margin-top: 16px;" onclick="handleRegister()">立即注册</button>
+        <div class="modal-footer"><div class="footer-text">已有账号？ <span class="footer-link" onclick="switchAuthView('login')">返回登录</span></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 未登录空状态 -->
+  <div id="unLoggedView" style="display: none; text-align: center; padding-top: 100px;">
+    <div style="width:80px; height:80px; background:#E8F0FE; border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 20px; font-size:40px; color:#1A73E8;">👤</div>
+    <h2 style="font-size:20px; margin-bottom:10px;">还未登录</h2>
+    <button class="login-btn" style="width:200px; margin:0 auto; max-width:80%;" onclick="document.getElementById('loginModal').classList.remove('hidden')">立即登录</button>
+  </div>
+
+  <!-- 已登录视图 -->
+  <div id="userView" style="display: none;">
+    <div class="mine-hero">
+      <div class="mine-user-row">
+        <div class="mine-avatar" id="mAvatar">U</div>
+        <div class="mine-user-info">
+          <div class="mine-name" id="mName">未登录</div>
+          <div class="mine-uid-row"><span class="mine-uid" id="mUid">ID: --------</span></div>
+        </div>
+      </div>
+      <div class="mine-stats">
+        <div class="mine-stat"><b id="statBalance">¥0.00</b><span>账户余额</span></div>
+        <div class="mine-stat"><b id="statDoing">0</b><span>今日已做</span></div>
+        <div class="mine-stat"><b id="statTotal">0</b><span>累计任务</span></div>
+      </div>
+    </div>
+
+    <!-- 提现区域 -->
+    <div class="mine-section" style="padding: 15px 14px;">
+      <h3 style="margin-bottom:10px; font-size:16px;">💸 申请提现</h3>
+      <div style="font-size:12px; color:#666; margin-bottom:10px; line-height:1.5;">
+        支付宝满 1 元起提；USDT 满 1U 起提。<br>
+        <b>USDT 仅限走币安内部转账（填 UID），系统将按 1 USDT = 6.62 元 自动兑换。</b><br>
+        <span style="color:#D93025; font-weight:bold;">⏰ 提现通道开放时间：每天 20:00 - 22:00。其余时间无法发起申请。</span>
+      </div>
+      <select id="withdraw-method" onchange="toggleWithdrawInput()" style="width:100%; height:44px; border-radius:8px; border:1px solid #ddd; margin-bottom:10px; padding:0 10px;">
+        <option value="alipay">支付宝提现 (人民币)</option>
+        <option value="usdt">USDT提现 (仅限币安UID)</option>
+      </select>
+      <input type="text" id="alipay-input" placeholder="填支付宝账号和真实姓名" style="width:100%; height:44px; border-radius:8px; border:1px solid #ddd; margin-bottom:10px; padding:0 10px;">
+      <input type="text" id="usdt-input" placeholder="填币安 UID (纯数字)" class="hidden" style="width:100%; height:44px; border-radius:8px; border:1px solid #ddd; margin-bottom:10px; padding:0 10px; display:none;">
+      <input type="number" id="withdraw-amount" placeholder="输入提现人民币金额" style="width:100%; height:44px; border-radius:8px; border:1px solid #ddd; margin-bottom:10px; padding:0 10px;">
+      <button class="btn-withdraw" onclick="requestWithdraw()">申请提现</button>
+    </div>
+
+    <div class="mine-section">
+      <button class="mine-admin-btn" id="adminBtn" style="display:none;" onclick="showAdminPanel()">⚙️ 进入管理后台</button>
+      <button class="mine-logout-btn" onclick="handleLogout()">退出登录</button>
+    </div>
+  </div>
+</div>
+
+<!-- 管理后台全屏蒙层 -->
+<div id="adminPage" style="position:fixed; inset:0; background:#F0F4F8; z-index:9999999; overflow-y:auto; display:none; padding-bottom:50px;">
+  <div class="home-header" style="position:sticky; top:0; z-index:10;">
+    <div class="header-left"><div class="header-title">👑 管理后台</div></div>
+    <div class="header-more" onclick="document.getElementById('adminPage').style.display='none'">关闭</div>
+  </div>
+  
+  <div style="padding:15px;">
+    <div class="mine-section" style="padding: 15px; border: 2px solid #1A73E8;">
+      <h3 style="margin-bottom:10px; color:#1A73E8;">➕ 上架新任务</h3>
+      <input type="text" id="new-task-title" placeholder="任务标题 (例: 夸克网盘转存)" style="width:100%; height:40px; padding:0 10px; border:1px solid #ddd; border-radius:8px; margin-bottom:10px;">
+      <select id="new-task-category" style="width:100%; height:40px; padding:0 10px; border:1px solid #ddd; border-radius:8px; margin-bottom:10px; background:#fff;">
+        <option value="夸克">夸克</option>
+        <option value="百度">百度</option>
+        <option value="迅雷">迅雷</option>
+        <option value="UC">UC</option>
+        <option value="其他">其他</option>
+      </select>
+      <input type="text" id="new-task-link" placeholder="网盘分享链接" style="width:100%; height:40px; padding:0 10px; border:1px solid #ddd; border-radius:8px; margin-bottom:10px;">
+      <input type="number" id="new-task-reward" placeholder="奖励金额 (例: 0.2)" style="width:100%; height:40px; padding:0 10px; border:1px solid #ddd; border-radius:8px; margin-bottom:10px;">
+      <button class="btn-withdraw" onclick="addNewTask()" style="height:40px; background:#1A73E8;">确认上架</button>
+    </div>
+
+    <h3 style="margin-top:20px; margin-bottom:10px;">📋 当前任务池 (点击可删除)</h3>
+    <div id="adminTaskList"></div>
+
+    <h3 style="margin-top:20px; margin-bottom:10px;">🔍 任务待审核</h3>
+    <div id="adminSubList"></div>
+    
+    <h3 style="margin-top:20px; margin-bottom:10px;">💰 提现待打款</h3>
+    <div id="adminWithdrawList"></div>
+  </div>
+</div>
+
+<!-- 底部导航 -->
+<div class="bottom-nav">
+  <div class="nav-item active" onclick="switchNav('home', this)"><div class="nav-icon-wrapper"><svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg></div><span>首页</span></div>
+  <div class="nav-item" onclick="switchNav('order', this)"><div class="nav-icon-wrapper"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg></div><span>记录</span></div>
+  <div class="nav-item" onclick="switchNav('mine', this)"><div class="nav-icon-wrapper"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg></div><span>我的</span></div>
+</div>
+
+<script>
+// ================= 配置 (已为你替换) =================
+const SUPABASE_URL = 'https://rqvzqeguhtwkeyqducbn.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_csFJT_Vg9eOr1ekRP2S3vA_d9wBinNv';
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const INTERNAL_USDT_RATE = 6.62; 
+let currentUser = null;
+let isAdmin = false;
+let allTasks = [];
+let currentCategory = 'all';
+let myTodaySubmissions = []; 
+let myTodayCategories = [];  
+
+// 口令
+const fruits = ['苹果', '香蕉', '西瓜', '葡萄', '橙子', '草莓'];
+const today = new Date();
+const todayStr = `今日口令：${fruits[today.getDate() % fruits.length]}${today.getDate()}${today.getMonth()+1}`;
+document.getElementById('today-pwd').innerText = todayStr.split('：')[1];
+
+function showToast(msg) {
+  let el = document.querySelector('.toast');
+  if(!el){ el = document.createElement('div'); el.className='toast'; document.body.appendChild(el); }
+  el.innerText = msg;
+  requestAnimationFrame(() => el.classList.add('show'));
+  setTimeout(() => el.classList.remove('show'), 2000);
+}
+
+// ================= 完美缝合的登录逻辑 =================
+let currentCaptcha = "", generatedCode = "", countdownTimer = null;
+
+function drawCaptcha() {
+  const canvas = document.getElementById('captchaCanvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const width = canvas.width, height = canvas.height;
+  ctx.clearRect(0, 0, width, height);
+  ctx.fillStyle = '#E5E6EB'; ctx.fillRect(0, 0, width, height);
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  currentCaptcha = '';
+  for (let i = 0; i < 4; i++) currentCaptcha += chars.charAt(Math.floor(Math.random() * chars.length));
+  ctx.font = 'bold 24px Arial'; ctx.textBaseline = 'middle';
+  for (let i = 0; i < 4; i++) {
+    ctx.save();
+    ctx.translate(15 + i * 28, height / 2 + (Math.random() * 6 - 3));
+    ctx.rotate((Math.random() - 0.5) * 0.5);
+    ctx.fillStyle = `rgb(${Math.random() * 100}, ${Math.random() * 100}, ${Math.random() * 100})`;
+    ctx.fillText(currentCaptcha[i], 0, 0);
+    ctx.restore();
+  }
+}
+
+function togglePasswordVisibility() {
+  const pwd = document.getElementById('loginPassword');
+  const eye = document.getElementById('eyeIcon');
+  if (pwd.type === 'password') { pwd.type = 'text'; eye.style.stroke = '#1A73E8'; }
+  else { pwd.type = 'password'; eye.style.stroke = '#5F6368'; }
+}
+
+function switchAuthView(view) {
+  if (view === 'register') {
+    document.getElementById('loginView').style.display = 'none';
+    document.getElementById('registerView').style.display = 'block';
+  } else {
+    document.getElementById('loginView').style.display = 'block';
+    document.getElementById('registerView').style.display = 'none';
+    drawCaptcha();
+    clearInterval(countdownTimer);
+    const btn = document.getElementById('sendCodeBtn');
+    if (btn) { btn.disabled = false; btn.innerText = "获取验证码"; }
+  }
+}
+
+function closeLoginModal() { document.getElementById('loginModal').classList.add('hidden'); }
+
+function sendVerifyCode() {
+  const accountInput = document.getElementById('regAccount').value.trim();
+  if (!accountInput) { showToast("请先输入自定义账号！"); return; }
+  generatedCode = Math.floor(100000 + Math.random() * 900000).toString();
+  showToast(`验证码已发送：${generatedCode}`);
+  const btn = document.getElementById('sendCodeBtn');
+  let timeLeft = 60;
+  btn.disabled = true; btn.innerText = `${timeLeft}s 后重试`;
+  clearInterval(countdownTimer);
+  countdownTimer = setInterval(() => {
+    timeLeft--;
+    if (timeLeft <= 0) { clearInterval(countdownTimer); btn.disabled = false; btn.innerText = "获取验证码"; }
+    else btn.innerText = `${timeLeft}s 后重试`;
+  }, 1000);
+}
+
+async function handleRegister() {
+  const account = document.getElementById('regAccount').value.trim();
+  const password = document.getElementById('regPassword').value.trim();
+  const code = document.getElementById('regCode').value.trim();
+  if (!account || !password || !code) { showToast("请填写完整信息！"); return; }
+  if (code !== generatedCode) { showToast("验证码错误！"); return; }
+  
+  const email = account + '@example.com';
+  const { data, error } = await supabase.auth.signUp({ email: email, password: password });
+  if (error) { showToast("注册失败：" + error.message); return; }
+  showToast(`账号 "${account}" 注册成功！`);
+  switchAuthView('login');
+}
+
+async function handleLogin() {
+  const account = document.getElementById('loginAccount').value.trim();
+  const password = document.getElementById('loginPassword').value.trim();
+  const inputCaptcha = document.getElementById('loginCaptcha').value.trim();
+  
+  if (!account || !password) { showToast("请填写完整的登录信息！"); return; }
+  if (inputCaptcha.toLowerCase() !== currentCaptcha.toLowerCase()) { 
+    showToast("图形验证码错误！"); drawCaptcha(); return; 
+  }
+
+  const email = account + '@example.com';
+  const { data, error } = await supabase.auth.signInWithPassword({ email: email, password: password });
+  if (error) { showToast("登录失败：" + error.message); drawCaptcha(); return; }
+  
+  showToast("登录成功！");
+  closeLoginModal();
+  checkLoginStatus();
+}
+
+async function handleLogout() {
+  await supabase.auth.signOut();
+  showToast("已退出登录");
+  checkLoginStatus();
+  loadTasks();
+}
+
+async function checkLoginStatus() {
+  const { data: { session } } = await supabase.auth.getSession();
+  const userView = document.getElementById('userView');
+  const unLoggedView = document.getElementById('unLoggedView');
+  
+  if (session) {
+    currentUser = session.user;
+    userView.style.display = 'block';
+    unLoggedView.style.display = 'none';
+    
+    const { data: profile } = await supabase.from('profiles').select('*').eq('id', currentUser.id).single();
+    if(profile) {
+      isAdmin = profile.is_admin || false;
+      document.getElementById('mName').innerText = profile.username || currentUser.email.split('@')[0];
+      document.getElementById('mAvatar').innerText = (profile.username || 'U').charAt(0).toUpperCase();
+      document.getElementById('mUid').innerText = 'ID: ' + currentUser.id.slice(0,8).toUpperCase();
+      document.getElementById('statBalance').innerText = '¥' + Number(profile.balance || 0).toFixed(2);
+      document.getElementById('adminBtn').style.display = isAdmin ? 'block' : 'none';
+    }
+    
+    const { data: subs } = await supabase.from('submissions')
+      .select('task_id, tasks(category)')
+      .eq('user_id', currentUser.id)
+      .gte('created_at', new Date().toISOString().split('T')[0]);
+    
+    myTodaySubmissions = subs ? subs.map(s => s.task_id) : [];
+    myTodayCategories = subs ? [...new Set(subs.map(s => s.tasks?.category).filter(Boolean))] : [];
+    
+    const { count: totalCount } = await supabase.from('submissions').select('*', { count: 'exact', head: true }).eq('user_id', currentUser.id);
+    document.getElementById('statDoing').innerText = myTodaySubmissions.length;
+    document.getElementById('statTotal').innerText = totalCount || 0;
+    
+  } else {
+    currentUser = null;
+    myTodaySubmissions = [];
+    myTodayCategories = [];
+    userView.style.display = 'none';
+    unLoggedView.style.display = 'block';
+    document.getElementById('loginModal').classList.remove('hidden');
+    switchAuthView('login');
+    drawCaptcha();
+  }
+}
+
+// ================= 下面全部是你的网盘核心逻辑，原封不动 =================
+function requireLogin() {
+  if (!currentUser) {
+    showToast('请先登录账号！');
+    document.getElementById('loginModal').classList.remove('hidden');
+    return false;
+  }
+  return true;
+}
+
+function switchNav(pageName, element) {
+  document.getElementById('loginModal').classList.add('hidden');
+  document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+  if (element) element.classList.add('active');
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById(pageName + 'Page').classList.add('active');
+  
+  if(pageName === 'home') loadTasks();
+  if(pageName === 'order') loadWithdrawRecords();
+  if(pageName === 'mine') checkLoginStatus();
+}
+
+function getDailyTaskForCategory(tasks, category) {
+  if(!currentUser || !tasks || tasks.length === 0) return null;
+  let hash = 0;
+  const str = currentUser.id.replace(/-/g, '') + category + (new Date().getDate());
+  for (let i = 0; i < str.length; i++) { hash = ((hash << 5) - hash) + str.charCodeAt(i); hash |= 0; }
+  const index = Math.abs(hash) % tasks.length;
+  return tasks[index];
+}
+
+function filterCategory(cat, element) {
+  currentCategory = cat;
+  document.querySelectorAll('.cat-tab').forEach(el => el.classList.remove('active'));
+  element.classList.add('active');
+  renderTasks();
+}
+
+async function loadTasks() {
+  const { data: tasks, error } = await supabase.from('tasks').select('*').order('created_at', { ascending: false });
+  if(error) { document.getElementById('task-list').innerHTML = '<div class="empty">加载失败，请检查网络</div>'; return; }
+  allTasks = tasks || [];
+  const categories = [...new Set(allTasks.map(t => t.category).filter(Boolean))];
+  const tabsContainer = document.getElementById('categoryTabs');
+  tabsContainer.innerHTML = `<div class="cat-tab ${currentCategory === 'all' ? 'active' : ''}" onclick="filterCategory('all', this)">🎁 全部分类盲盒</div>`;
+  categories.forEach(c => {
+    tabsContainer.innerHTML += `<div class="cat-tab ${currentCategory === c ? 'active' : ''}" onclick="filterCategory('${c}', this)">${c}</div>`;
+  });
+  renderTasks();
+}
+
+function renderTasks() {
+  const list = document.getElementById('task-list');
+  list.innerHTML = '';
+  if(allTasks.length === 0) { list.innerHTML = '<div class="empty">暂无任务，请稍后再来</div>'; return; }
+
+  if (currentCategory === 'all') {
+    if(!currentUser) {
+      list.innerHTML = `<div class="card locked"><div class="card-header"><span class="card-title">🔒 请先登录</span></div><div class="card-desc">登录后系统每天为你随机分配各个网盘的专属高奖励任务！</div><button class="btn-submit locked-btn" onclick="requireLogin()">去登录</button></div>`;
+      return;
+    }
+    const categories = [...new Set(allTasks.map(t => t.category).filter(Boolean))];
+    categories.forEach(cat => {
+      const catTasks = allTasks.filter(t => t.category === cat);
+      const dailyTask = getDailyTaskForCategory(catTasks, cat);
+      if(!dailyTask) return;
+      if (myTodayCategories.includes(cat)) {
+        list.innerHTML += `<div class="card locked" style="border-left: 4px solid #137333;"><div class="card-header"><span class="card-title">【${cat}】今日盲盒</span><span style="color:#137333; font-weight:bold;">✅ 已做完</span></div><div class="card-desc">该网盘今日的任务您已完成，明天再来抽取新的吧。</div></div>`;
+      } else {
+        list.innerHTML += createTaskCard(dailyTask, true);
+      }
+    });
+    return;
+  }
+
+  const catTasks = allTasks.filter(t => t.category === currentCategory);
+  if(catTasks.length === 0) { list.innerHTML = '<div class="empty">该分类下暂无任务</div>'; return; }
+  if(!currentUser) {
+    list.innerHTML = `<div class="card locked"><div class="card-header"><span class="card-title">🔒 请先登录</span></div><div class="card-desc">登录后才能查看专属盲盒。</div><button class="btn-submit locked-btn" onclick="requireLogin()">去登录</button></div>`;
+    return;
+  }
+  const dailyTask = getDailyTaskForCategory(catTasks, currentCategory);
+  if (myTodayCategories.includes(currentCategory)) {
+    list.innerHTML = `<div class="card locked" style="border-left: 4px solid #137333;"><div class="card-header"><span class="card-title">【${currentCategory}】今日盲盒</span><span style="color:#137333; font-weight:bold;">✅ 已做完</span></div><div class="card-desc">该网盘今日的任务您已完成，明天再来抽取新的吧。</div></div>`;
+  } else {
+    list.innerHTML = createTaskCard(dailyTask, true);
+  }
+}
+
+function createTaskCard(task, isDaily) {
+  const isLocked = !currentUser;
+  const isDone = myTodaySubmissions.includes(task.id);
+  const btnClass = isLocked ? 'locked-btn' : '';
+  const btnText = isLocked ? '🔒 登录后做任务' : (isDone ? '✅ 今日已完成' : '提交审核');
+  const badge = isDaily ? `<div class="daily-badge">${task.category} 专属</div>` : '';
+  return `
+    <div class="card ${isLocked || isDone ? 'locked' : ''}">
+      ${badge}
+      <div class="card-header" style="margin-top: ${isDaily ? '10px' : '0'};">
+        <span class="card-title">${task.title}</span>
+        <span class="card-price">¥${Number(task.reward).toFixed(2)}</span>
+      </div>
+      <div class="card-desc">第一步：<a href="javascript:void(0)" onclick="if(requireLogin() && !${isDone}) window.open('${task.link}', '_blank')" style="color:${isLocked || isDone ? '#9CA3AF' : '#1A73E8'}; font-weight:bold; text-decoration:underline;">点此去保存文件</a></div>
+      <div style="font-size:13px; margin-bottom:10px; color:#5F6368;">第二步：填手机号 + 上传全屏截图</div>
+      <input type="text" id="phone-${task.id}" placeholder="填写网盘注册手机号" ${isLocked || isDone ? 'disabled' : ''} style="width:100%; padding:10px; border:1px solid #ddd; border-radius:8px; margin-bottom:10px; background:${isLocked || isDone ? '#f5f5f5' : '#fff'};">
+      <label for="file-${task.id}" class="upload-btn" onclick="if(!requireLogin() || ${isDone}) event.preventDefault();" style="color:${isLocked || isDone ? '#9CA3AF' : '#1A73E8'}; border-color:${isLocked || isDone ? '#ddd' : '#1A73E8'};">📷 点击选择截图上传</label>
+      <input type="file" id="file-${task.id}" accept="image/*" style="display:none;" onchange="document.getElementById('label-${task.id}').innerText = '✅ 已选择图片'">
+      <button class="btn-submit ${btnClass}" id="btn-${task.id}" onclick="if(!${isDone}) submitTask(${task.id})">${btnText}</button>
+    </div>
+  `;
+}
+
+async function submitTask(taskId) {
+  if(!requireLogin()) return;
+  const phone = document.getElementById(`phone-${taskId}`).value;
+  const fileInput = document.getElementById(`file-${taskId}`);
+  if(!phone || fileInput.files.length === 0) return showToast('请填写手机号并上传截图！');
+  
+  const btn = document.getElementById(`btn-${taskId}`);
+  btn.innerText = '上传中...'; btn.disabled = true;
+  
+  const file = fileInput.files[0];
+  const fileName = `${currentUser.id}-${Date.now()}.jpg`;
+  
+  const { error: uploadError } = await supabase.storage.from('proofs').upload(fileName, file);
+  if(uploadError) { btn.innerText='重新提交'; btn.disabled=false; return showToast('图片上传失败'); }
+  
+  const { data: { publicUrl } } = supabase.storage.from('proofs').getPublicUrl(fileName);
+  
+  const { error } = await supabase.from('submissions').insert({
+    user_id: currentUser.id, task_id: taskId, phone: phone, proof: publicUrl
+  });
+  
+  if(error) {
+    if(error.message.includes('duplicate key')) showToast('该任务您今天已经提交过啦！');
+    else showToast('提交失败');
+    btn.innerText='提交审核'; btn.disabled = false;
+  } else {
+    showToast('提交成功！等待审核');
+    await checkLoginStatus(); 
+    renderTasks(); 
+  }
+}
+
+// ================= 提现逻辑 =================
+function toggleWithdrawInput() {
+  const method = document.getElementById('withdraw-method').value;
+  document.getElementById('alipay-input').style.display = method === 'alipay' ? 'block' : 'none';
+  document.getElementById('usdt-input').style.display = method === 'usdt' ? 'block' : 'none';
+  const amountInput = document.getElementById('withdraw-amount');
+  if (method === 'alipay') amountInput.placeholder = "输入提现人民币金额 (最低1元)";
+  else amountInput.placeholder = "输入人民币金额 (如 6.62元 = 1U)";
+}
+toggleWithdrawInput();
+
+async function requestWithdraw() {
+  if(!currentUser) return;
+  const nowHour = new Date().getHours();
+  if (nowHour < 20 || nowHour >= 22) return showToast('⏰ 提现通道尚未开启，请每天 20:00 - 22:00 再来！');
+
+  const method = document.getElementById('withdraw-method').value;
+  const amount = parseFloat(document.getElementById('withdraw-amount').value);
+  let accountInfo = '';
+  
+  if(method === 'alipay') {
+    accountInfo = document.getElementById('alipay-input').value;
+    if(!accountInfo) return showToast('请填写支付宝账号');
+    if(amount < 1) return showToast('支付宝最低 1 元起提');
+    const { error } = await supabase.from('withdrawals').insert({ user_id: currentUser.id, amount: amount, method: method, account_info: accountInfo });
+    if(error) { showToast(error.message.includes('余额不足')?'余额不足':'提现失败'); } 
+    else { showToast('提现申请已提交！'); document.getElementById('withdraw-amount').value = ''; checkLoginStatus(); }
+  } else {
+    accountInfo = document.getElementById('usdt-input').value;
+    if(!accountInfo) return showToast('请填写币安 UID');
+    if(accountInfo.length < 6) return showToast('UID 格式不正确，请核对');
+    const usdtAmount = (amount / INTERNAL_USDT_RATE).toFixed(2); 
+    if(parseFloat(usdtAmount) < 1) return showToast('USDT最低 1U 起提，请输入至少 6.62 元');
+    const { error } = await supabase.from('withdrawals').insert({ user_id: currentUser.id, amount: parseFloat(usdtAmount), method: method, account_info: accountInfo });
+    if(error) { showToast(error.message.includes('余额不足')?'余额不足':'提现失败'); } 
+    else { showToast(`申请成功！将发放 ${usdtAmount} USDT`); document.getElementById('withdraw-amount').value = ''; checkLoginStatus(); }
+  }
+}
+
+async function loadWithdrawRecords() {
+  const list = document.getElementById('orderList');
+  if(!currentUser) { list.innerHTML = '<div class="empty">请先登录</div>'; return; }
+  const { data } = await supabase.from('withdrawals').select('*').eq('user_id', currentUser.id).order('created_at', { ascending: false });
+  if(!data || data.length === 0) { list.innerHTML = '<div class="empty">暂无提现记录</div>'; return; }
+  list.innerHTML = data.map(w => {
+    const unit = w.method === 'alipay' ? '元' : 'USDT';
+    return `
+    <div class="card" style="padding:15px;">
+      <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
+        <span style="font-weight:bold;">${w.method === 'alipay' ? '支付宝提现' : 'USDT提现 (币安)'}</span>
+        <span style="color:${w.status === 'pending' ? '#E37400' : (w.status === 'paid' ? '#137333' : '#D93025')}; font-size:13px;">
+          ${w.status === 'pending' ? '待打款 (20:00-22:00)' : (w.status === 'paid' ? '已到账' : '已驳回退款')}
+        </span>
+      </div>
+      <div style="font-size:13px; color:#5F6368;">金额：<span style="color:#ff3b30; font-weight:bold;">${w.amount} ${unit}</span></div>
+      <div style="font-size:13px; color:#5F6368; margin-top:5px;">账号：${w.account_info}</div>
+      <div style="font-size:12px; color:#aaa; margin-top:5px;">${new Date(w.created_at).toLocaleString()}</div>
+    </div>
+  `}).join('');
+}
+
+// ================= 管理后台 =================
+async function showAdminPanel() {
+  if(!isAdmin) return showToast('无权限');
+  document.getElementById('adminPage').style.display = 'block';
+  loadAdminData();
+}
+
+async function loadAdminData() {
+  const { data: tasks } = await supabase.from('tasks').select('*').order('created_at', { ascending: false });
+  const taskList = document.getElementById('adminTaskList');
+  if(!tasks || tasks.length === 0) { taskList.innerHTML = '<div class="empty" style="padding:10px 0;">暂无任务</div>'; } 
+  else {
+    taskList.innerHTML = tasks.map(t => `
+      <div class="admin-card" style="display:flex; justify-content:space-between; align-items:center;">
+        <div style="flex:1; overflow:hidden;">
+          <div style="font-size:14px; font-weight:bold;">[${t.category || '未分类'}] ${t.title} (¥${t.reward})</div>
+          <div style="font-size:11px; color:#888; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${t.link}</div>
+        </div>
+        <button onclick="deleteTask(${t.id})" style="padding:5px 10px; background:#FCE8E6; color:#D93025; border:none; border-radius:5px; font-size:12px; flex:none; margin-left:10px;">删除</button>
+      </div>
+    `).join('');
+  }
+
+  const { data: subs } = await supabase.from('submissions').select('*, tasks(title), profiles(username, email)').eq('status', 'pending').order('created_at', { ascending: false });
+  const subList = document.getElementById('adminSubList');
+  if(!subs || subs.length === 0) { subList.innerHTML = '<div class="empty" style="padding:20px 0;">暂无待审核任务</div>'; } 
+  else {
+    subList.innerHTML = subs.map(s => `
+      <div class="admin-card">
+        <div style="font-size:13px; margin-bottom:5px;"><b>用户:</b> ${s.profiles?.username || s.profiles?.email} | <b>手机:</b> <span style="color:red;">${s.phone}</span></div>
+        <div style="font-size:13px; margin-bottom:5px;"><b>任务:</b> ${s.tasks?.title}</div>
+        <a href="${s.proof}" target="_blank"><img src="${s.proof}"></a>
+        <div style="margin-top:10px; display:flex; gap:10px;">
+          <button onclick="reviewSub(${s.id}, 'approved')" style="padding:5px 15px; background:#28a745; color:#fff; border:none; border-radius:5px;">通过并加钱</button>
+          <button onclick="reviewSub(${s.id}, 'rejected')" style="padding:5px 15px; background:#dc3545; color:#fff; border:none; border-radius:5px;">拒绝(P图)</button>
+        </div>
+      </div>
+    `).join('');
+  }
+  
+  const { data: ws } = await supabase.from('withdrawals').select('*, profiles(username)').eq('status', 'pending').order('created_at', { ascending: false });
+  const wList = document.getElementById('adminWithdrawList');
+  if(!ws || ws.length === 0) { wList.innerHTML = '<div class="empty" style="padding:20px 0;">暂无待打款提现</div>'; } 
+  else {
+    wList.innerHTML = ws.map(w => {
+      const unit = w.method === 'alipay' ? '元' : 'USDT';
+      return `
+      <div class="admin-card">
+        <div style="font-size:13px; margin-bottom:5px;"><b>用户:</b> ${w.profiles?.username} | <b>方式:</b> ${w.method === 'alipay' ? '支付宝' : 'USDT'}</div>
+        <div style="font-size:13px; margin-bottom:5px;"><b>金额:</b> <span style="color:red; font-weight:bold;">${w.amount} ${unit}</span></div>
+        <div style="font-size:13px; margin-bottom:5px;"><b>账号(UID):</b> ${w.account_info}</div>
+        <div style="margin-top:10px; display:flex; gap:10px;">
+          <button onclick="reviewWithdraw(${w.id}, 'paid')" style="padding:5px 15px; background:#28a745; color:#fff; border:none; border-radius:5px;">确认已打款</button>
+          <button onclick="reviewWithdraw(${w.id}, 'rejected')" style="padding:5px 15px; background:#dc3545; color:#fff; border:none; border-radius:5px;">驳回退款</button>
+        </div>
+      </div>
+    `}).join('');
+  }
+}
+
+async function addNewTask() {
+  const title = document.getElementById('new-task-title').value.trim();
+  const category = document.getElementById('new-task-category').value;
+  const link = document.getElementById('new-task-link').value.trim();
+  const reward = parseFloat(document.getElementById('new-task-reward').value);
+  if(!title || !link || isNaN(reward)) return showToast('请填写完整的任务信息！');
+  const { error } = await supabase.from('tasks').insert({ title, category, link, reward });
+  if(error) return showToast('上架失败：' + error.message);
+  showToast('任务上架成功！');
+  document.getElementById('new-task-title').value = ''; document.getElementById('new-task-link').value = ''; document.getElementById('new-task-reward').value = '';
+  loadAdminData(); loadTasks();
+}
+
+async function deleteTask(id) {
+  if(!confirm('确定要下架删除这个任务吗？')) return;
+  const { error } = await supabase.from('tasks').delete().eq('id', id);
+  if(error) return showToast('删除失败');
+  showToast('任务已下架');
+  loadAdminData(); loadTasks();
+}
+
+async function reviewSub(id, status) {
+  if(!confirm('确定操作吗？')) return;
+  await supabase.from('submissions').update({ status }).eq('id', id);
+  showToast('操作成功'); loadAdminData();
+}
+
+async function reviewWithdraw(id, status) {
+  if(!confirm('确定操作吗？')) return;
+  await supabase.from('withdrawals').update({ status }).eq('id', id);
+  showToast('操作成功'); loadAdminData();
+}
+
+window.onload = async () => {
+  await checkLoginStatus();
+  loadTasks();
+};
+</script>
+</body>
+</html>
